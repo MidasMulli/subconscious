@@ -41,6 +41,116 @@ if not log.handlers:
 
 CLAUDE_MD = Path(os.path.expanduser("~/Desktop/cowork/CLAUDE.md"))
 EMBEDDING_CACHE = Path(__file__).parent / ".canonical_embeddings.npz"
+WIKILINK_INDEX = Path(os.path.expanduser("~/Desktop/cowork/vault/.wikilink_index.json"))
+
+# Wiki-link regex — MUST stay in sync with research_tools.py
+WIKILINK_RX = re.compile(r'(?<!\!)\[\[([^\]|#]+?)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]')
+
+
+def _extract_wikilinks(path: Path) -> set[str]:
+    """Return the set of wiki-link targets (basenames, no path) in `path`."""
+    try:
+        text = path.read_text(errors="ignore")
+    except Exception:
+        return set()
+    out: set[str] = set()
+    for m in WIKILINK_RX.finditer(text):
+        target = m.group(1).strip()
+        # Strip any trailing /INDEX or path components -> keep the basename leaf
+        leaf = target.rsplit("/", 1)[-1]
+        if leaf:
+            out.add(leaf)
+    return out
+
+
+class LinkNeighborhood:
+    """Cache wiki-link sets per source file for a single supersession run.
+
+    Also resolves absolute paths back to basenames via the vault wikilink index,
+    so we can detect direct edges (source file A -> source file B).
+    """
+
+    def __init__(self):
+        self._link_cache: dict[str, set[str]] = {}
+        self._abs_to_basename: dict[str, str] = {}
+        self._loaded = False
+        self.claude_md_links: set[str] = set()
+        self.claude_md_basename: str = "CLAUDE"  # no .md in wiki-links
+
+    def _ensure_loaded(self):
+        if self._loaded:
+            return
+        self._loaded = True
+        if WIKILINK_INDEX.exists():
+            try:
+                data = json.loads(WIKILINK_INDEX.read_text())
+                meta = data.get("_meta", {})
+                abs_paths = meta.get("abs_paths", {})
+                # Reverse map: abs path -> basename
+                for basename, abs_p in abs_paths.items():
+                    self._abs_to_basename[abs_p] = basename
+            except Exception as e:
+                log.warning(f"link-neighborhood: failed to load wikilink index: {e}")
+        # Pre-compute CLAUDE.md's wiki-link set (canonical state source)
+        if CLAUDE_MD.exists():
+            self.claude_md_links = _extract_wikilinks(CLAUDE_MD)
+
+    def links_for_source(self, source: str) -> set[str]:
+        """Return the wiki-link target set for a source path (absolute or basename)."""
+        self._ensure_loaded()
+        if not source:
+            return set()
+        if source in self._link_cache:
+            return self._link_cache[source]
+        p = Path(source)
+        if not p.is_absolute():
+            # Might be a basename from the index
+            p = Path(self._abs_to_basename.get(source, source))
+        links = _extract_wikilinks(p) if p.exists() else set()
+        self._link_cache[source] = links
+        return links
+
+    def basename_for_source(self, source: str) -> str | None:
+        """Reverse-lookup: absolute source path -> wiki-link basename (or None)."""
+        self._ensure_loaded()
+        if not source:
+            return None
+        return self._abs_to_basename.get(source)
+
+    def link_boost(self, source: str) -> tuple[float, list[str], bool]:
+        """Return (boost, shared_targets, direct_edge) for a memory's source file
+        against the CLAUDE.md canonical neighborhood.
+
+        - boost is additive to cosine similarity:
+            +0.10 for >=2 shared targets, +0.20 for >=5
+            +0.05 extra if CLAUDE.md wiki-links directly to this source's basename
+              (explicit edge), capped at +0.25 total.
+        - shared_targets is the intersection list (sorted, truncated for logging).
+        - direct_edge is True when CLAUDE.md contains [[<this_basename>]].
+        """
+        self._ensure_loaded()
+        if not source or not self.claude_md_links:
+            return 0.0, [], False
+        mem_links = self.links_for_source(source)
+        if not mem_links:
+            return 0.0, [], False
+        shared = mem_links & self.claude_md_links
+        boost = 0.0
+        if len(shared) >= 5:
+            boost = 0.20
+        elif len(shared) >= 2:
+            boost = 0.10
+
+        # Direct-edge check: does CLAUDE.md wiki-link to THIS source file's basename?
+        direct = False
+        basename = self.basename_for_source(source)
+        if basename and basename in self.claude_md_links:
+            direct = True
+            boost = min(0.25, boost + 0.05)
+
+        shared_sorted = sorted(shared)[:6]
+        return boost, shared_sorted, direct
+
 
 # ---------------------------------------------------------------------------
 # Tense / framing heuristic
@@ -322,6 +432,8 @@ def supersession_decision(
     canonical_embeddings: np.ndarray,
     similarity_threshold: float = 0.55,
     tense_threshold: float = 0.0,
+    memory_source: str | None = None,
+    neighborhood: "LinkNeighborhood | None" = None,
 ) -> tuple[bool, dict]:
     """Decide whether `memory_text` is a stale-state claim that should be superseded.
 
@@ -339,6 +451,26 @@ def supersession_decision(
     best_idx = int(np.argmax(sims))
     best_sim = float(sims[best_idx])
     best_entry = canonical_entries[best_idx]
+
+    # --- Link-neighborhood signal (additive to cosine) --------------------
+    # Only memories with a populated source field (claude_automemory and any
+    # future link-bearing memories) get the link-aware boost. The existing
+    # ~5,000 enricher memories have source == None and fall through to the
+    # unchanged cosine-only path.
+    link_boost = 0.0
+    link_shared: list[str] = []
+    link_direct = False
+    if memory_source and neighborhood is not None:
+        link_boost, link_shared, link_direct = neighborhood.link_boost(memory_source)
+        if link_boost > 0.0:
+            best_sim = float(min(1.0, best_sim + link_boost))
+            # Per-decision log so dry_run output shows the new behavior
+            log.info(
+                "link_boost: +%.2f (shared targets: %s%s)",
+                link_boost,
+                ", ".join(link_shared) if link_shared else "-",
+                ", direct_edge" if link_direct else "",
+            )
 
     text_lower = memory_text.lower()
 
@@ -372,7 +504,14 @@ def supersession_decision(
 
     # SLOW PATH: similarity gate then signal-stack
     if best_sim < similarity_threshold:
-        return False, {"reason": "below_similarity", "best_sim": best_sim, "best_entry": best_entry["source"]}
+        return False, {
+            "reason": "below_similarity",
+            "best_sim": best_sim,
+            "best_entry": best_entry["source"],
+            "link_boost": link_boost,
+            "link_shared": link_shared,
+            "link_direct": link_direct,
+        }
 
     # SIGNAL 3: restate vs contradict (check this BEFORE tense, it's the strongest)
     # If the memory contains canonical key terms AND no stale terms, it's
@@ -441,12 +580,17 @@ def semantic_supersession(col=None, dry_run: bool = False) -> dict:
     canonical_entries, canonical_embs = get_canonical_embeddings(claude_text, embedder)
     log.info(f"Semantic supersession: {len(canonical_entries)} canonical entries loaded")
 
+    # Build the link-neighborhood once per run. Cached per source path.
+    # Memories without a source field fall through to cosine-only scoring.
+    neighborhood = LinkNeighborhood()
+
     all_data = col.get(include=["documents", "metadatas", "embeddings"])
     n_total = len(all_data["ids"])
     n_skipped_already = 0
     n_skipped_zero_emb = 0
     n_decided_supersede = 0
     n_decided_keep = 0
+    n_link_boosted = 0
 
     decisions_to_apply = []
     for fid, doc, meta, emb in zip(
@@ -459,8 +603,18 @@ def semantic_supersession(col=None, dry_run: bool = False) -> dict:
             n_skipped_zero_emb += 1
             continue
 
+        # Extract source field from metadata for link-neighborhood scoring.
+        # Auto-memory and any future link-bearing memories will have this set;
+        # the existing ~5,000 enricher-extracted memories will not, and they
+        # fall through to the cosine-only path unchanged.
+        memory_source = meta.get("source") or None
+
         decide, info = supersession_decision(
-            doc, np.asarray(emb), canonical_entries, canonical_embs)
+            doc, np.asarray(emb), canonical_entries, canonical_embs,
+            memory_source=memory_source, neighborhood=neighborhood)
+
+        if info.get("link_boost", 0.0) > 0.0:
+            n_link_boosted += 1
 
         if decide:
             n_decided_supersede += 1
@@ -486,6 +640,7 @@ def semantic_supersession(col=None, dry_run: bool = False) -> dict:
         "zero_embedding_skipped": n_skipped_zero_emb,
         "kept": n_decided_keep,
         "superseded": n_decided_supersede,
+        "link_boosted": n_link_boosted,
         "dry_run": dry_run,
     }
     log.info(f"Semantic supersession: {stats}")
