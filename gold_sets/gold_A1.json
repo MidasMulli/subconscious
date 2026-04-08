@@ -1,0 +1,114 @@
+[
+  {
+    "content": "FFN fusion is implemented in gen_fused_ffn_mlmodelc() in compiler.py",
+    "memory_type": "fact",
+    "entities": ["ane-compiler", "compiler.py", "FFN fusion"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "FFN fusion uses NeuralNetworkBuilder compiled via xcrun, patching ReLU to GELU mode 19",
+    "memory_type": "fact",
+    "entities": ["NeuralNetworkBuilder", "GELU", "ANE"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "Fused conv+GELU+conv compiles to 1 ANE dispatch, down from 2 dispatches plus CPU GELU",
+    "memory_type": "fact",
+    "entities": ["ANE", "FFN fusion"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "QKV fusion combines c_attn weight [768 to 2304] as a single conv with output split on CPU",
+    "memory_type": "fact",
+    "entities": ["QKV fusion", "GPT-2"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "GPT-2 fusion reduced dispatches from 73 to 37 per token",
+    "memory_type": "state",
+    "entities": ["GPT-2", "ane-compiler"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "GPT-2 fused throughput is 135.9 +/- 3.0 tok/s, up from 28.9 tok/s (4.7x speedup)",
+    "memory_type": "state",
+    "entities": ["GPT-2", "ane-compiler"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "GPT-2 fusion kill test passed 11/11 and 15/15 tokens matching PyTorch on two prompts",
+    "memory_type": "state",
+    "entities": ["GPT-2", "ane-compiler", "PyTorch"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama SiLU on ANE is easy via activation mode 25",
+    "memory_type": "fact",
+    "entities": ["ANE", "Llama", "SiLU"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama SwiGLU fusion is medium difficulty due to elementwise MUL between two conv streams",
+    "memory_type": "fact",
+    "entities": ["ANE", "Llama", "SwiGLU"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama large dims are medium difficulty because 16.8M params exceeds aned 1.3M compilation limit",
+    "memory_type": "fact",
+    "entities": ["ANE", "Llama", "aned"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama GQA, RoPE, RMSNorm, and no-bias are all easy for ANE",
+    "memory_type": "fact",
+    "entities": ["ANE", "Llama"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "At 37 dispatches GPT-2 runs at 7.4ms per token, which is 200us per dispatch round-trip",
+    "memory_type": "fact",
+    "entities": ["GPT-2", "ANE"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "200us per dispatch is 2.2x the bare ANE dispatch floor of 93us",
+    "memory_type": "fact",
+    "entities": ["ANE"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "GPT-2 117M has 768 hidden dim and 3072 FFN dim",
+    "memory_type": "fact",
+    "entities": ["GPT-2"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "At GPT-2 dimensions, ANE compute per fused op is near-zero and CPU overhead collapse is the main speedup factor",
+    "memory_type": "fact",
+    "entities": ["GPT-2", "ANE"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "GPT-2 fusion correctness is verified: fusion does not break output",
+    "memory_type": "state",
+    "entities": ["GPT-2", "ane-compiler"],
+    "domain": "research",
+    "confidence": "high"
+  }
+]

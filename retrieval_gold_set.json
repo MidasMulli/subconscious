@@ -1,0 +1,130 @@
+{
+  "description": "Build 3 retrieval gold set. 20 queries across 4 categories. For each query, top-5 retrieval must surface a memory matching at least one of must_contain_any. Hit@5 is the gate metric.",
+  "version": "main22-build3-v1",
+  "created": "2026-04-07",
+  "queries": [
+    {
+      "category": "project_status",
+      "query": "What's active right now?",
+      "must_contain_any": ["subconscious", "spec decode", "qwen_spec_decode", "paper", "ane-compiler", "8b q8"],
+      "rationale": "Should surface current Active NOW projects from CLAUDE.md or knowledge files"
+    },
+    {
+      "category": "project_status",
+      "query": "What's parked right now?",
+      "must_contain_any": ["living model", "chimera", "neuron as paper", "parked", "cen analysis"],
+      "rationale": "Should surface parked-projects list from CLAUDE.md"
+    },
+    {
+      "category": "project_status",
+      "query": "What are the current priorities?",
+      "must_contain_any": ["arxiv", "subconscious", "spec decode", "8b", "knowledge files", "build 1", "build 2", "build 3"],
+      "rationale": "Current focus from Roadmap or session log"
+    },
+    {
+      "category": "project_status",
+      "query": "Should I work on Living Model?",
+      "must_contain_any": ["living model", "parked", "no headroom", "0 headroom", "no adaptation"],
+      "rationale": "Adversarial-ish: Living Model is parked with measurements, must surface that not old positive signals"
+    },
+    {
+      "category": "project_status",
+      "query": "What's the status of the spec decode server?",
+      "must_contain_any": ["qwen_spec_decode_server", "n-gram-only", "truncate-on-miss", "main 21", "shipped", "restored"],
+      "rationale": "Current production state - the file was created in Build 2"
+    },
+
+    {
+      "category": "technical",
+      "query": "What is the ANE dispatch latency floor?",
+      "must_contain_any": ["93", "0.7", "1.0", "2.0 ms", "dispatch floor", "dispatch latency"],
+      "rationale": "93us dispatch floor is well-documented"
+    },
+    {
+      "category": "technical",
+      "query": "What did we measure for cross-accelerator contention?",
+      "must_contain_any": ["-4.7", "+1.4", "+4.5", "contention", "concurrent"],
+      "rationale": "Paper measurement -4.7% GPU / +1.4% ANE under concurrent load. Main 21 +4.5% on Qwen stack."
+    },
+    {
+      "category": "technical",
+      "query": "Q8 vs Q4 on ANE?",
+      "must_contain_any": ["q8", "q4", "31%", "dequant", "fp16 speed", "31 percent"],
+      "rationale": "Q8 = FP16 speed, Q4 has 31% dequant penalty"
+    },
+    {
+      "category": "technical",
+      "query": "What's the current 8B tok/s on ANE?",
+      "must_contain_any": ["7.9", "8b", "ane", "72 coreml", "72 dispatches"],
+      "rationale": "8B Q8 ANE production: 7.9 tok/s"
+    },
+    {
+      "category": "technical",
+      "query": "What's the N-gram acceptance rate on the Qwen stack?",
+      "must_contain_any": ["n-gram", "acceptance", "17%", "1.5%", "hit rate", "12.2", "24.0"],
+      "rationale": "Main 21 N-gram findings: ~17% hit rate, ~1.5% accept on novel prose"
+    },
+
+    {
+      "category": "cross_domain",
+      "query": "How does the extraction pipeline affect generation throughput?",
+      "must_contain_any": ["8b", "ane", "extraction", "concurrent", "+4.5", "-4.7", "contention", "subconscious"],
+      "rationale": "8B ANE extraction runs concurrent with 72B GPU verifier"
+    },
+    {
+      "category": "cross_domain",
+      "query": "What's the relationship between the 8B ANE model and the 72B verifier?",
+      "must_contain_any": ["8b", "ane", "extraction", "verifier", "72b", "subconscious", "memory"],
+      "rationale": "8B ANE extracts memories, 72B verifier consumes them via Subconscious injection"
+    },
+    {
+      "category": "cross_domain",
+      "query": "Where are the spec decode dead paths documented?",
+      "must_contain_any": ["dead path", "claude.md", "spec_decode.md", "knowledge", "killed", "eagle"],
+      "rationale": "Spec decode dead paths in CLAUDE.md and spec_decode.md knowledge file"
+    },
+    {
+      "category": "cross_domain",
+      "query": "What did we learn about the model swap from Llama to Qwen?",
+      "must_contain_any": ["model swap", "main 19", "qwen", "llama", "spec decode", "lost", "main 21", "restored"],
+      "rationale": "Main 19 swap, spec decode lost, Main 21 restored"
+    },
+    {
+      "category": "cross_domain",
+      "query": "How does the Subconscious affect cross-session continuity?",
+      "must_contain_any": ["100%", "cross-session", "continuity", "5 sessions", "subconscious", "memory injection"],
+      "rationale": "Paper Section 5.3: 100% across 5 sessions, 6/6 references"
+    },
+
+    {
+      "category": "adversarial",
+      "query": "Should we revisit Living Model with the new attention findings?",
+      "must_contain_any": ["parked", "no headroom", "0 headroom", "killed", "dead", "main 12"],
+      "rationale": "Living Model is parked with explicit kill data. Must surface kill, not old positive."
+    },
+    {
+      "category": "adversarial",
+      "query": "Is EAGLE-3 worth trying on the Q4 verifier?",
+      "must_contain_any": ["dead", "0%", "killed", "not advisable", "quantization destroys", "not viable"],
+      "rationale": "EAGLE-3 is a dead path. Must surface kill, not old confused memories."
+    },
+    {
+      "category": "adversarial",
+      "query": "Can we run the drafter on the GPU to save CPU cycles?",
+      "must_contain_any": ["0.89", "shared gpu", "dead", "drafter never on gpu", "unified memory", "contend"],
+      "rationale": "External model on shared GPU = 0.89x baseline. Dead path."
+    },
+    {
+      "category": "adversarial",
+      "query": "What about using cache-swap for ANE custom activations?",
+      "must_contain_any": ["cache-swap", "dead", "loadmodel", "persistent compiled state", "killed"],
+      "rationale": "Cache-swap dead for content modification. Must surface kill."
+    },
+    {
+      "category": "adversarial",
+      "query": "What model is running in production?",
+      "must_contain_any": ["qwen2.5-72b", "qwen 2.5-72b", "qwen-2.5-72b", "72b verifier", "verifier on gpu"],
+      "rationale": "THE Build 1 residual failure. Must surface the 72B verifier specifically (not just the 8B ANE which is a valid but partial answer)."
+    }
+  ]
+}

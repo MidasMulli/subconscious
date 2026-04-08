@@ -1,0 +1,107 @@
+[
+  {
+    "content": "Llama-1B combined config (C CPU ops + cross-layer fusion) achieves 50.2 tok/s, up from 42.2 baseline (+19%)",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "ane-compiler"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "All 4 Llama-1B configs pass 15/15 kill test against PyTorch",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "ane-compiler"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "C CPU ops alone improve Llama-1B from 42.2 to 46.2 tok/s (+9.5%), cutting CPU time from 2.69ms to 0.46ms (6x faster)",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "Accelerate"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Cross-layer fusion alone improves Llama-1B from 42.2 to 45.5 tok/s (+7.8%), ANE time drops from 16.73ms to 15.44ms",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "ANE", "cross-layer fusion"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "C CPU ops and cross-layer fusion stack nearly additively for Llama-1B",
+    "memory_type": "fact",
+    "entities": ["Llama-1B", "ane-compiler"],
+    "domain": "research",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama-1B combined config per-token budget: ANE 15.51ms (75.5%), lm_head 4.62ms (22.5%), CPU 0.40ms (1.9%)",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "ANE"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "CPU is noise at 0.4ms in the combined Llama-1B config",
+    "memory_type": "state",
+    "entities": ["Llama-1B"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama-1B bottleneck is ANE dispatch time (15.5ms) and lm_head (4.6ms)",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "ANE"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama-1B lm_head uses 8 chunks dispatching 128K vocab, consuming 22.5% of per-token time",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "lm_head"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Llama-1B lm_head 8 chunks at 32MB each sits exactly at the SRAM cliff boundary",
+    "memory_type": "fact",
+    "entities": ["ANE", "SRAM", "lm_head"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "Fusing lm_head to 4 chunks (64MB each) would exceed the SRAM cliff and probably be slower",
+    "memory_type": "fact",
+    "entities": ["ANE", "SRAM", "lm_head"],
+    "domain": "hardware",
+    "confidence": "high"
+  },
+  {
+    "content": "Vocab pruning from 128K to 50K would shrink lm_head weights from 256MB to 100MB, fitting in 3-4 SRAM-safe chunks",
+    "memory_type": "fact",
+    "entities": ["lm_head", "SRAM"],
+    "domain": "research",
+    "confidence": "medium"
+  },
+  {
+    "content": "Vocab pruning could reduce lm_head time from 4.62ms to 1.8-2.2ms",
+    "memory_type": "fact",
+    "entities": ["lm_head"],
+    "domain": "research",
+    "confidence": "medium"
+  },
+  {
+    "content": "Llama-1B in embedding mode (skip lm_head) would run at 15.91ms per token = 62.9 tok/s",
+    "memory_type": "fact",
+    "entities": ["Llama-1B", "ANE"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "The combined Llama-1B config uses 25 dispatches per token with 16 cross-layer + 2 standalone ANE dispatches",
+    "memory_type": "state",
+    "entities": ["Llama-1B", "ANE", "cross-layer fusion"],
+    "domain": "production",
+    "confidence": "high"
+  }
+]

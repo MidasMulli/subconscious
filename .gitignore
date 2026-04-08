@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.canonical_embeddings.npz
+.snapshot_*.json
+# Dev data dumps from extraction experiments
+chunks/
+extractions/
+extractions_v2/
+extractions_v3/
+extractions_v4/
+retrieval_logs/

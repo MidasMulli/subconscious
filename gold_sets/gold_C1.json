@@ -1,0 +1,107 @@
+[
+  {
+    "content": "Subconscious is an invisible memory manager, not an agent or daemon",
+    "memory_type": "fact",
+    "entities": ["Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Subconscious role is to make the 70B feel like it remembers everything without the user knowing Subconscious exists",
+    "memory_type": "fact",
+    "entities": ["Subconscious", "70B"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Previous architecture was bottom-up (what to put on the compute lane), Subconscious is top-down (what does the user experience)",
+    "memory_type": "fact",
+    "entities": ["Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "The user never sees or interacts with Subconscious directly",
+    "memory_type": "preference",
+    "entities": ["Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Subconscious memory lifecycle has four phases: Ingestion, Storage, Retrieval, Maintenance",
+    "memory_type": "fact",
+    "entities": ["Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Ingestion phase extracts atomic facts from every 70B exchange",
+    "memory_type": "fact",
+    "entities": ["Subconscious", "Ingestion"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Storage uses structured memory store with content, timestamp, source, entity links, relevance decay, access count, and embedding",
+    "memory_type": "fact",
+    "entities": ["Subconscious", "Storage"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Retrieval answers what memories matter given the users current message before every 70B generation",
+    "memory_type": "fact",
+    "entities": ["Subconscious", "Retrieval", "70B"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Maintenance includes consolidation, contradiction resolution, decay, and strengthening of memories",
+    "memory_type": "fact",
+    "entities": ["Subconscious", "Maintenance"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Subconscious gets smarter through three mechanisms: memory store growth, relevance score adaptation via usage statistics, and extraction skill improvement via 70B feedback",
+    "memory_type": "fact",
+    "entities": ["Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Relevance scores adapt through usage statistics without any model weight changes",
+    "memory_type": "fact",
+    "entities": ["Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Extraction skill can improve via 70B feedback during idle time",
+    "memory_type": "fact",
+    "entities": ["Subconscious", "70B"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Subconscious is fundamentally different from an agent daemon: an agent does tasks, Subconscious manages memory",
+    "memory_type": "fact",
+    "entities": ["Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "The 70B should surface things the user forgot they mentioned and never surface irrelevant noise",
+    "memory_type": "preference",
+    "entities": ["70B", "Subconscious"],
+    "domain": "production",
+    "confidence": "high"
+  },
+  {
+    "content": "Memory extraction is structured extraction of atomic facts, not summarization",
+    "memory_type": "fact",
+    "entities": ["Subconscious", "Ingestion"],
+    "domain": "production",
+    "confidence": "high"
+  }
+]
