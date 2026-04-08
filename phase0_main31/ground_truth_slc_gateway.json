@@ -1,0 +1,143 @@
+{
+  "_meta": {
+    "source_document": "/Users/midas/.claude/projects/-Users-midas/memory/finding_slc_inference_gateway.md",
+    "annotated_by": "CC self-annotation (Main 31, no operator-in-loop)",
+    "annotated_at": "2026-04-08",
+    "method": "Manual extraction by reading the source document line-by-line and recording every quantitative measurement, dead-path reference, and synthesis-level finding present in the text. Anti-bias note: this annotation was done BEFORE running 70B extraction to avoid anchoring."
+  },
+  "schema_1_hardware_measurement": [
+    {
+      "component": "AMCC",
+      "property": "RD bucket residency at 80 GB/s tier during 8B Q8 ANE inference",
+      "value": 67.97,
+      "unit": "%",
+      "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz over 8 seconds",
+      "session": "Main 30 A3",
+      "confidence": "high",
+      "source_file": "finding_slc_inference_gateway.md",
+      "supersedes": null
+    },
+    {
+      "component": "AMCC",
+      "property": "RD active fraction during 8B Q8 ANE inference",
+      "value": 94.03,
+      "unit": "%",
+      "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz",
+      "session": "Main 30 A3",
+      "confidence": "high",
+      "source_file": "finding_slc_inference_gateway.md",
+      "supersedes": null
+    },
+    {
+      "component": "AMCC",
+      "property": "RD active fraction during 70B GPU inference",
+      "value": 97.81,
+      "unit": "%",
+      "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz",
+      "session": "Main 30 A3",
+      "confidence": "high",
+      "source_file": "finding_slc_inference_gateway.md",
+      "supersedes": null
+    },
+    {
+      "component": "AMCC",
+      "property": "RD active fraction at idle baseline",
+      "value": 1.89,
+      "unit": "%",
+      "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz",
+      "session": "Main 30 A3",
+      "confidence": "high",
+      "source_file": "finding_slc_inference_gateway.md",
+      "supersedes": null
+    },
+    {
+      "component": "SLC",
+      "property": "approximate total capacity",
+      "value": 48,
+      "unit": "MB",
+      "measurement_method": "Main 27 S5 geometry derivation, referenced as 'orders of magnitude smaller than working set' context",
+      "session": "Main 27 S5",
+      "confidence": "medium",
+      "source_file": "finding_slc_inference_gateway.md",
+      "supersedes": null
+    },
+    {
+      "component": "ANE",
+      "property": "dedicated DMA published ceiling",
+      "value": 111,
+      "unit": "GB/s",
+      "measurement_method": "corpus reference to prior ANE bandwidth published figure",
+      "session": "Main 30 A3",
+      "confidence": "low",
+      "source_file": "finding_slc_inference_gateway.md",
+      "supersedes": null
+    },
+    {
+      "component": "AMCC",
+      "property": "peak measured upstream bandwidth ceiling for ANE",
+      "value": 160,
+      "unit": "GB/s",
+      "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0, peak observed bucket excursion",
+      "session": "Main 30 A3",
+      "confidence": "high",
+      "source_file": "finding_slc_inference_gateway.md",
+      "supersedes": "111 GB/s ANE channel ceiling figure from corpus"
+    }
+  ],
+  "schema_2_dead_path": [
+    {
+      "path_name": "SLC optimization for inference (hit-rate caching)",
+      "status": "sharpened",
+      "original_hypothesis": "SLC tuning would deliver inference speedup via cache-hit-rate optimization on reused weights.",
+      "evidence_against": "Working set (8B Q8 = 7.2 GB, 70B Q4 = 37 GB) is orders of magnitude larger than SLC (~48 MB), so each weight read is a cache miss that goes to DRAM. The 340x weight overwrite per token prevents any temporal reuse pattern.",
+      "evidence_session": "Main 27",
+      "scope": "Dead as a HIT-RATE optimization. Working set won't fit, no temporal reuse opportunity exists.",
+      "remaining_leads": [],
+      "source_file": "finding_slc_inference_gateway.md"
+    },
+    {
+      "path_name": "SLC cache hints for any production workload",
+      "status": "dead",
+      "original_hypothesis": "encodeCacheHintTag pinning would deliver bandwidth wins by keeping inference weights resident.",
+      "evidence_against": "encodeCacheHintTag pins for hit-rate, which doesn't apply since the working set won't fit in SLC.",
+      "evidence_session": "Main 27 S3",
+      "scope": "Still dead. The Main 27 S3 K-reuse measurement and the unreachability of the API from ANE/CPU paths together confirm no production path benefits.",
+      "remaining_leads": [],
+      "source_file": "finding_slc_inference_gateway.md"
+    }
+  ],
+  "schema_3_architectural_finding": [
+    {
+      "finding": "The SLC is a high-bandwidth streaming gateway, not a working-set cache.",
+      "detail": "Every DRAM byte transits through the AMCC controller during inference. The cache hit rate is near zero (working set ≫ SLC capacity), but the AMCC controller sustains 80-160 GB/s read bandwidth and is the actual upstream bandwidth ceiling for ANE workloads — higher than the published 111 GB/s ANE channel figure.",
+      "evidence_chain": [
+        {
+          "session": "Main 27",
+          "measurement": "Cacheability analysis of inference working sets",
+          "result": "Weights overwrite SLC ~340x per token; no temporal reuse possible at the working-set scale"
+        },
+        {
+          "session": "Main 30 A3",
+          "measurement": "PMP0 AMCC RD bucket residency during 8B Q8 ANE inference (tools/ioreport_sampler_v2, 1Hz × 8s)",
+          "result": "80 GB/s bucket held for 67.97% of wall clock; excursions to 160 GB/s; 94.03% active overall"
+        },
+        {
+          "session": "Main 30 A3",
+          "measurement": "PMP0 AMCC RD bucket residency during 70B GPU inference",
+          "result": "97.81% active, distribution spread 64-160 GB/s"
+        }
+      ],
+      "implications": [
+        "The SLC dead-path entry must distinguish CACHE HIT RATE (still ~0%) from BANDWIDTH GATEWAY (sustained 80-160 GB/s, load-bearing)",
+        "The published 111 GB/s ANE channel ceiling may be incomplete — the AMCC layer measured 160 GB/s peak",
+        "Future 'SLC is irrelevant to inference' claims must reference this finding to avoid the cacheability vs bandwidth conflation",
+        "SLC tuning experiments should not be proposed without re-checking whether the AMCC bandwidth ceiling is the actual constraint"
+      ],
+      "contradicts": [
+        "The Main 27 conclusion 'SLC dead for inference' as a universal claim — it is now sharpened to 'dead as a hit-rate optimization' only"
+      ],
+      "status": "confirmed",
+      "source_files": ["finding_slc_inference_gateway.md"]
+    }
+  ]
+}

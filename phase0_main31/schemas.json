@@ -1,0 +1,168 @@
+{
+  "_meta": {
+    "name": "Main 31 Phase 0 hardware-corpus extraction schemas",
+    "created": "2026-04-08",
+    "purpose": "Extract structured records from Main 27-30 hardware research session reports. Three schemas of increasing difficulty.",
+    "extraction_model": "70B Qwen2.5 (qwen_spec_decode_server.py :8899) via Lotto Pattern",
+    "validation": "phase0_validator.py vs ground_truth_<doc>.json"
+  },
+
+  "schema_1_hardware_measurement": {
+    "description": "Structured quantitative measurement of an Apple Silicon hardware property.",
+    "shape": {
+      "component": {
+        "type": "string",
+        "valid_values": ["SLC", "ANE", "GPU", "MCC", "DRAM", "CPU", "NAX", "AGX", "MACC", "AMCC", "AFI", "DCS", "PMP0", "AMC"],
+        "required": true
+      },
+      "property": {
+        "type": "string",
+        "description": "What is being measured. Free text but should be a precise property name.",
+        "examples": ["L1 cache size", "L2 cache latency", "NoC link peak bandwidth", "way count", "active controller %", "dispatch count per token", "RD bucket residency"],
+        "required": true
+      },
+      "value": {
+        "type": "number",
+        "description": "Numeric measurement. Always a number, not a range. Use the midpoint for ranges.",
+        "required": true
+      },
+      "unit": {
+        "type": "string",
+        "valid_values": ["GB/s", "MB", "KB", "B", "ns", "us", "ms", "s", "TFLOPS", "GFLOPS", "ways", "bits", "%", "count", "tok/s", "channels", "bytes"],
+        "required": true
+      },
+      "measurement_method": {
+        "type": "string",
+        "description": "How the measurement was taken. Should reference the tool or technique.",
+        "examples": ["IOReport PMP0 sampling via ioreport_sampler_v2", "AMCC kext register read", "Metal pointer-chase compute shader", "DCS 0x0300 partition mask OR-decomposition", "powermetrics --samplers ane_power"],
+        "required": true
+      },
+      "session": {
+        "type": "string",
+        "description": "Which session produced this measurement. Format: 'Main NN [thread/agent if applicable]'",
+        "examples": ["Main 27 S5", "Main 28 Thread A", "Main 28 Thread B", "Main 30 A2", "Main 30 A3"],
+        "required": true
+      },
+      "confidence": {
+        "type": "string",
+        "valid_values": ["high", "medium", "low"],
+        "description": "high = direct measurement reproducible across runs; medium = single measurement or derived; low = inferred or estimated",
+        "required": true
+      },
+      "source_file": {
+        "type": "string",
+        "description": "Vault path to the document containing this measurement.",
+        "required": true
+      },
+      "supersedes": {
+        "type": "string",
+        "nullable": true,
+        "description": "If this measurement replaces an earlier one, name the prior measurement and its source. null if novel.",
+        "examples": ["12-way SLC from CTRL2 mask width (Main 26 amcc_register_analysis.md)", null]
+      }
+    }
+  },
+
+  "schema_2_dead_path": {
+    "description": "Record of a hypothesis that was tested and killed (or revived/sharpened). Captures the reasoning + evidence.",
+    "shape": {
+      "path_name": {
+        "type": "string",
+        "description": "Short identifier for the dead path. Should match the dead-paths table entry if one exists.",
+        "examples": ["encodeCacheHintTag for production workloads", "ANE asymmetric dual-link 2x lever", "MACC0 dead/spare", "DCS 0x0300 way mask writes"],
+        "required": true
+      },
+      "status": {
+        "type": "string",
+        "valid_values": ["dead", "revived", "sharpened", "open_lead"],
+        "required": true
+      },
+      "original_hypothesis": {
+        "type": "string",
+        "description": "What the proposed lever or finding was, in one sentence.",
+        "required": true
+      },
+      "evidence_against": {
+        "type": "string",
+        "description": "What the measurement showed, in 1-3 sentences. Quote numbers when present.",
+        "required": true
+      },
+      "evidence_session": {
+        "type": "string",
+        "description": "Session that produced the killing evidence. Format: 'Main NN [thread]'.",
+        "required": true
+      },
+      "scope": {
+        "type": "string",
+        "description": "What EXACTLY is dead. Should not be broader than the measurement supports. Avoid vague universal claims.",
+        "examples": ["DCS writes have no measured effect ON ANE specifically (per-agent effect on TB/PCIe/CPU/GPU not measured)", "encodeCacheHintTag dead for batched-dispatch GPU pipelines (the original 71-87% wins required one-dispatch-per-CB pattern that no production path uses)"],
+        "required": true
+      },
+      "remaining_leads": {
+        "type": "array",
+        "items": {"type": "string"},
+        "nullable": true,
+        "description": "Open questions or revival conditions. null if path is fully closed.",
+        "examples": [["RE the slot-index-to-agent map from IODeviceTree mcc-channels", "single-bit sweep watching AGX/ANE IOReport"], null]
+      },
+      "source_file": {
+        "type": "string",
+        "required": true
+      }
+    }
+  },
+
+  "schema_3_architectural_finding": {
+    "description": "Synthesis-level finding that crosses multiple measurements or sessions. Captures the evidence chain and implications.",
+    "shape": {
+      "finding": {
+        "type": "string",
+        "description": "One-sentence summary of the finding.",
+        "examples": ["The SLC is a high-bandwidth streaming gateway, not a working-set cache.", "ANE has two physical NoC links, both active and balanced during inference."],
+        "required": true
+      },
+      "detail": {
+        "type": "string",
+        "description": "2-3 sentence explanation of what the finding actually says.",
+        "required": true
+      },
+      "evidence_chain": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "shape": {
+            "session": "string",
+            "measurement": "string",
+            "result": "string"
+          }
+        },
+        "description": "Ordered list of measurements that build to this finding. Each item has a session, what was measured, and what came out.",
+        "required": true,
+        "min_length": 1
+      },
+      "implications": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "What this means for inference / future research / dead-path table updates."
+      },
+      "contradicts": {
+        "type": "array",
+        "items": {"type": "string"},
+        "nullable": true,
+        "description": "Prior findings or community claims this finding contradicts. null if novel without contradiction."
+      },
+      "status": {
+        "type": "string",
+        "valid_values": ["confirmed", "provisional", "refuted", "recharacterized"],
+        "required": true
+      },
+      "source_files": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "All vault files that contribute to this finding.",
+        "required": true,
+        "min_length": 1
+      }
+    }
+  }
+}

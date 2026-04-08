@@ -1,0 +1,22 @@
+[
+  {
+    "path_name": "SLC optimization for inference",
+    "status": "sharpened",
+    "original_hypothesis": "SLC can be optimized for inference to improve hit rate and reduce DRAM traffic.",
+    "evidence_against": "Main 30 A3 measured 80-160 GB/s sustained read bandwidth from the SLC controller (AMCC) during 8B ANE inference, confirming that the SLC acts as a mandatory transit layer for DRAM reads. The working set (8B Q8 = 7.2 GB, 70B Q4 = 37 GB) is much larger than SLC capacity (~48 MB), so each weight read is a cache miss that goes to DRAM.",
+    "evidence_session": "Main 30 A3",
+    "scope": "SLC is dead as a hit-rate optimization for inference. The working set is too large to fit in SLC, and there is no temporal reuse opportunity.",
+    "remaining_leads": ["is the AMCC controller's bandwidth a real bottleneck?"],
+    "source_file": "finding_slc_inference_gateway.md"
+  },
+  {
+    "path_name": "SLC cache hints for any production workload",
+    "status": "sharpened",
+    "original_hypothesis": "SLC cache hints (e.g., encodeCacheHintTag) can improve performance for production workloads.",
+    "evidence_against": "Main 30 A3 confirmed that the SLC acts as a mandatory transit layer for DRAM reads during inference, with 80-160 GB/s sustained read bandwidth. The working set is much larger than SLC capacity, so each weight read is a cache miss that goes to DRAM.",
+    "evidence_session": "Main 30 A3",
+    "scope": "SLC cache hints are dead for hit-rate optimization. encodeCacheHintTag pins for hit-rate, which doesn't apply to inference workloads with working sets much larger than SLC capacity.",
+    "remaining_leads": [],
+    "source_file": "finding_slc_inference_gateway.md"
+  }
+]

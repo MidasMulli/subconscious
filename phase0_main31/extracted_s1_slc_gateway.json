@@ -1,0 +1,7 @@
+[
+  {"component": "AMCC", "property": "RD bucket residency at 80 GB/s tier", "value": 67.97, "unit": "%", "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz", "session": "Main 30 A3", "confidence": "high", "source_file": "finding_slc_inference_gateway.md", "supersedes": null},
+  {"component": "AMCC", "property": "RD bucket peak observed", "value": 160, "unit": "GB/s", "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz", "session": "Main 30 A3", "confidence": "high", "source_file": "finding_slc_inference_gateway.md", "supersedes": null},
+  {"component": "AMCC", "property": "RD active%", "value": 94.03, "unit": "%", "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz", "session": "Main 30 A3", "confidence": "high", "source_file": "finding_slc_inference_gateway.md", "supersedes": null},
+  {"component": "AMCC", "property": "RD active%", "value": 97.81, "unit": "%", "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz", "session": "Main 30 A3", "confidence": "high", "source_file": "finding_slc_inference_gateway.md", "supersedes": null},
+  {"component": "AMCC", "property": "RD active%", "value": 1.89, "unit": "%", "measurement_method": "tools/ioreport_sampler_v2 sampling PMP0 at 1Hz", "session": "Main 30 A3", "confidence": "high", "source_file": "finding_slc_inference_gateway.md", "supersedes": null}
+]

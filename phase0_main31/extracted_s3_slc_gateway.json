@@ -1,0 +1,24 @@
+[
+  {
+    "finding": "The SLC is a high-bandwidth streaming gateway, not a working-set cache.",
+    "detail": "During 8B ANE inference, the SLC controller (AMCC) sustains 80 GB/s read bandwidth for 68% of wall-clock time, with excursions to 160 GB/s. This indicates that the SLC acts as a mandatory transit layer for DRAM reads, even though the working set is much larger than the SLC capacity.",
+    "evidence_chain": [
+      {
+        "session": "Main 30 A3",
+        "measurement": "AMCC RD bucket distribution captured via `tools/ioreport_sampler_v2 --group PMP0 --interval 1.0 --duration 8` during three workloads: idle, 70B GPU inference, 8B ANE inference",
+        "result": "8B ANE inference: 80 GB/s read bucket active for 67.97% of samples, with regular excursions to 160 GB/s"
+      }
+    ],
+    "implications": [
+      "The 'SLC optimization for inference' dead path remains dead as a hit-rate optimization, but the SLC is still load-bearing as a bandwidth gateway.",
+      "The 'SLC cache hints for any production workload' dead path remains dead.",
+      "The AMCC controller's bandwidth may be a real bottleneck, with a peak of 160 GB/s, suggesting the 'ANE has dedicated 111 GB/s DMA' finding is incomplete.",
+      "Future sessions should distinguish between cache hit rate (still ~0%) and bandwidth gateway (sustained 80-160 GB/s) when discussing SLC relevance to inference."
+    ],
+    "contradicts": [
+      "Prior assumption that the SLC is irrelevant to inference because of its small capacity compared to the working set."
+    ],
+    "status": "confirmed",
+    "source_files": ["finding_slc_inference_gateway.md"]
+  }
+]
