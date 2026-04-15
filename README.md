@@ -4,6 +4,8 @@ Self-correcting cognitive memory layer for local LLM agents. Built for the Midas
 
 The user never sees the Subconscious. They notice the agent remembers what was shipped, what was killed, and what's still open across sessions.
 
+> This README is the operator-facing quickstart. The primary architectural description is **"Five Roadblocks to Persistent Memory for Personal AI"** (`vault/paper/five_roadblocks_personal_ai.md`), which defines the five structural failure modes in persistent memory systems and maps each loop here to an architectural response.
+
 ---
 
 ## Architecture
@@ -16,7 +18,7 @@ The user never sees the Subconscious. They notice the agent remembers what was s
                                  │
                     ┌────────────┴─────────────┐
                     │      LocalMemoryStore    │  SQLite WAL + numpy float32
-                    │  (orion-ane/memory/...)  │  matrix. ~14 MB / 4,500 mems.
+                    │  (orion-ane/memory/...)  │  matrix. ~7,400 memories.
                     └────────────┬─────────────┘
                                  │
         ┌────────────────────────┴────────────────────────┐
@@ -30,27 +32,32 @@ The user never sees the Subconscious. They notice the agent remembers what was s
    │ sync     │  │ supers  │  │ inject  │  │ inject  │    │
    │ (loop 5) │  │ (loop 6)│  │ (loop 7)│  │ (loop 8)│    │
    └──────────┘  └─────────┘  └─────────┘  └─────────┘    │
-   ┌──────────┐                                            │
-   │  vault   │                                            │
-   │  sweep   │                                            │
-   │ (loop 9) │                                            │
-   └──────────┘                                            │
+   ┌──────────┐  ┌──────────┐                              │
+   │  vault   │  │ reactive │                              │
+   │  sweep   │  │ triggers │                              │
+   │ (loop 9) │  │ (loop 10)│                              │
+   └──────────┘  └──────────┘                              │
         │                                                  │
-        └────────► all 9 loops orchestrated by ────────────┘
-                  maintenance.run_all() (hourly via launchd)
+        └────► 9 hourly loops via launchd + reactive ──────┘
+               triggers (event-driven, shipped Main 61)
 ```
 
-## The 9 maintenance loops
+## The 10 maintenance loops (9 hourly + reactive triggers)
 
 1. **`decay_scores`** — exponential decay on `relevance_score` (7-day half-life). Below `MIN_RELEVANCE=0.05` a memory is dormant.
 2. **`consolidate_duplicates`** — merge near-duplicate facts (cosine ≥ 0.85).
-3. **`resolve_contradictions`** — idle-time contradiction resolution via the 70B verifier on candidate pairs.
+3. **`resolve_contradictions`** — idle-time contradiction resolution via the production verifier on candidate pairs.
 4. **`vault_sync`** — supersede memories that conflict with canonical knowledge files (`vault/knowledge/*.md`).
 5. **`production_state_sync`** — keep the live production state mirrored into memory so the agent always knows what's running.
 6. **`semantic_supersession`** — three-signal supersession that catches paraphrased stale-state memories: `cosine similarity` + `tense classifier` + `restate-vs-contradict detector`. Catches what exact-string supersession misses.
-7. **`canonical_state_inject`** — parse `CLAUDE.md` tables (production critical path, services, active projects, dead paths) into first-class canonical-state memories with stable IDs (`canonical_<section>_<slug>`). Idempotent. Includes a contradiction scan with 4 signals (similarity 0.50 + entity binding + non-canonical + non-past-finding) so updating a number in `CLAUDE.md` automatically supersedes the conflicting present-tense noise.
+7. **`canonical_state_inject`** — parse [[CLAUDE]] tables (production critical path, services, active projects, dead paths) into first-class canonical-state memories with stable IDs (`canonical_<section>_<slug>`). Idempotent. Includes a contradiction scan with 4 signals (similarity 0.50 + entity binding + non-canonical + non-past-finding) so updating a number in [[CLAUDE]] automatically supersedes the conflicting present-tense noise.
 8. **`meta_memory_inject`** — parse session-log bullets into first-class activity memories with `source_role=meta`. Lets the agent answer "what did we ship today" / "what changed in the last build" from real history rather than hallucinating. Auto-orphans entries that age out of the 200-bullet active window.
 9. **`vault_sweep`** — scan `agent_reports/`, `ane-reverse/`, `~/models/`, sibling code repos for completed deliverables that no knowledge file references. **Surfaces unwired completed work.** Closes the recurring failure mode where five sessions in a row had a research agent stop on prior art that was sitting on disk but never indexed.
+10. **`reactive_maintenance`** (shipped Main 61) — event-driven triggers that close the correction window from hours to milliseconds. Framing-stale detection (60.9 ms from data change to flag) catches memories that are factually correct but incomplete after a configuration change; registry write propagation fans new canonical measurements out to the store immediately; immediate vault-sync fires on canonical knowledge-file edits without waiting for the hourly cycle. See Paper 2 §3 Roadblock 2 for the framing-staleness motivation.
+
+### Framing staleness
+
+A distinct degradation class beyond factual contradiction and temporal staleness: a memory is factually correct but incomplete in a way that misleads generation. The production example: "cross-accelerator contention is −4.7%" was measured correctly under Llama 70B, but after the Gemma 4 31B swap the correct symmetric GPU-side figure is −20.1%. Neither statement is wrong in isolation; a query about "the contention result" that retrieves only the old framing causes the generator to cite a stale number. Factual-contradiction detectors miss this because nothing contradicts. Relevance decay misses it because the old memory is still being accessed. The reactive trigger above was built specifically to catch this class. Full treatment in Paper 2 §3 Roadblock 2.
 
 ## Multi-path 5-signal retrieval
 
@@ -106,13 +113,13 @@ Falls back to CPU SentenceTransformer if the artifact is missing or `MIDAS_DISAB
 
 ## LocalMemoryStore
 
-The storage backend lives in [orion-ane/memory/local_store.py](https://github.com/MidasMulli/orion-ane/tree/main/memory). It replaced ChromaDB in Main 24 after a Track 2 banking purge wedged the ChromaDB rust binding's `get_collection` indefinitely. Building our own gave us:
+The storage backend lives in [orion-ane/memory/local_store.py](https://github.com/MidasMulli/orion-ane/tree/main/memory). It replaced the previous vector-DB backend in Main 24 after a bulk-deletion path wedged the rust binding's `get_collection` indefinitely. Building our own gave us:
 
 - SQLite WAL mode (set by us, controlled busy_timeout)
 - One ACID-atomic write path
 - In-memory numpy float32 matrix → sub-ms cosine via single matmul (no HNSW, no rust deadlock)
-- Drop-in `_CollectionShim` that exposes the chromadb `collection.{get,query,upsert,update,delete}` API surface so existing call sites work unchanged
-- 13.9 MB on disk for ~4,500 memories
+- Drop-in `_CollectionShim` that exposes a familiar `collection.{get,query,upsert,update,delete}` API surface so existing call sites work unchanged
+- ~7,400 memories at current operating scale
 - ~30-second migration from any pre-existing snapshot
 
 ## Files
@@ -120,7 +127,7 @@ The storage backend lives in [orion-ane/memory/local_store.py](https://github.co
 | File | Role |
 |---|---|
 | `multi_path_retrieve.py` | 5-signal fusion + presentation layer |
-| `canonical_inject.py` | loop 7 — parse CLAUDE.md → canonical memories |
+| `canonical_inject.py` | loop 7 — parse [[CLAUDE]] → canonical memories |
 | `meta_memory_inject.py` | loop 8 — parse session log → meta memories |
 | `semantic_supersede.py` | loop 6 — three-signal paraphrase supersession |
 | `vault_sweep.py` | loop 9 — surface unwired deliverables |
@@ -139,6 +146,11 @@ The storage backend lives in [orion-ane/memory/local_store.py](https://github.co
 - **Cross-session continuity: 100%** across 5 sessions (6/6 references resolved, 24/24 turns coherent)
 - **Vault sweep first run: 95% unreferenced** (428 of 451 scanned) — surfaced multiple completed deliverables that had been built but never wired into production
 - **System recall: 83%** combined (8B ANE extractor + CPU FactExtractor) on the gold set, vs 76% solo and 65% CPU-only
+
+## Papers
+
+- **Paper 1:** "Every Cycle Counts: A Self-Correcting Cognitive Architecture on Heterogeneous Consumer Silicon" — hardware substrate and cognitive pipeline. [arXiv link TBD]
+- **Paper 2:** "Five Roadblocks to Persistent Memory for Personal AI" — memory architecture taxonomy and measured outcomes. **Primary architectural description for this repo.** [arXiv link TBD]
 
 ## Related
 
