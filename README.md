@@ -1,6 +1,6 @@
 # Subconscious
 
-Self-correcting cognitive memory layer for local LLM agents. Built for the Midas agent in [orion-ane](https://github.com/MidasMulli/orion-ane), but the storage backend, retrieval engine, and maintenance loops are general-purpose. Not Apple-Silicon-specific — ANE acceleration is optional, CPU fallback built in.
+Self-correcting cognitive memory layer for local LLM agents. Built for the Midas agent in [orion-ane](https://github.com/MidasMulli/cognitive-stack-ane), but the storage backend, retrieval engine, and maintenance loops are general-purpose. Not Apple-Silicon-specific — ANE acceleration is optional, CPU fallback built in.
 
 The user never sees the Subconscious. They notice the agent remembers what was shipped, what was killed, and what's still open across sessions.
 
@@ -113,7 +113,7 @@ Falls back to CPU SentenceTransformer if the artifact is missing or `MIDAS_DISAB
 
 ## LocalMemoryStore
 
-The storage backend lives in [orion-ane/memory/local_store.py](https://github.com/MidasMulli/orion-ane/tree/main/memory). It replaced the previous vector-DB backend in Main 24 after a bulk-deletion path wedged the rust binding's `get_collection` indefinitely. Building our own gave us:
+The storage backend lives in [orion-ane/memory/local_store.py](https://github.com/MidasMulli/cognitive-stack-ane/tree/main/memory). It replaced the previous vector-DB backend in Main 24 after a bulk-deletion path wedged the rust binding's `get_collection` indefinitely. Building our own gave us:
 
 - SQLite WAL mode (set by us, controlled busy_timeout)
 - One ACID-atomic write path
@@ -154,7 +154,7 @@ The storage backend lives in [orion-ane/memory/local_store.py](https://github.co
 
 ## Related
 
-- [orion-ane](https://github.com/MidasMulli/orion-ane) — the Midas agent and `LocalMemoryStore` backend
+- [orion-ane](https://github.com/MidasMulli/cognitive-stack-ane) — the Midas agent and `LocalMemoryStore` backend
 - [ane-compiler](https://github.com/MidasMulli/ane-compiler) — the 8B Q8 extractor that feeds the Subconscious
 - [ngram-engine](https://github.com/MidasMulli/ngram-engine) — the verifier server with prefix-cache integration
 
