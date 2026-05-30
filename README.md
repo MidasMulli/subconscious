@@ -1,6 +1,6 @@
 # Subconscious
 
-Self-correcting cognitive memory layer for local LLM agents. Built for the Midas agent in [orion-ane](https://github.com/MidasMulli/cognitive-stack-ane), but the storage backend, retrieval engine, and maintenance loops are general-purpose. Not Apple-Silicon-specific — ANE acceleration is optional, CPU fallback built in.
+Self-correcting cognitive memory layer for local LLM agents. Built for the Midas agent in [orion-ane](https://github.com/MidasMulli/cognitive-stack-ane), but the storage backend, retrieval engine, and maintenance loops are general-purpose. Not Apple-Silicon-specific - ANE acceleration is optional, CPU fallback built in.
 
 The user never sees the Subconscious. They notice the agent remembers what was shipped, what was killed, and what's still open across sessions.
 
@@ -44,16 +44,16 @@ The user never sees the Subconscious. They notice the agent remembers what was s
 
 ## The 10 maintenance loops (9 hourly + reactive triggers)
 
-1. **`decay_scores`** — exponential decay on `relevance_score` (7-day half-life). Below `MIN_RELEVANCE=0.05` a memory is dormant.
-2. **`consolidate_duplicates`** — merge near-duplicate facts (cosine ≥ 0.85).
-3. **`resolve_contradictions`** — idle-time contradiction resolution via the production verifier on candidate pairs.
-4. **`vault_sync`** — supersede memories that conflict with canonical knowledge files (`vault/knowledge/*.md`).
-5. **`production_state_sync`** — keep the live production state mirrored into memory so the agent always knows what's running.
-6. **`semantic_supersession`** — three-signal supersession that catches paraphrased stale-state memories: `cosine similarity` + `tense classifier` + `restate-vs-contradict detector`. Catches what exact-string supersession misses.
-7. **`canonical_state_inject`** — parse [[CLAUDE]] tables (production critical path, services, active projects, dead paths) into first-class canonical-state memories with stable IDs (`canonical_<section>_<slug>`). Idempotent. Includes a contradiction scan with 4 signals (similarity 0.50 + entity binding + non-canonical + non-past-finding) so updating a number in [[CLAUDE]] automatically supersedes the conflicting present-tense noise.
-8. **`meta_memory_inject`** — parse session-log bullets into first-class activity memories with `source_role=meta`. Lets the agent answer "what did we ship today" / "what changed in the last build" from real history rather than hallucinating. Auto-orphans entries that age out of the 200-bullet active window.
-9. **`vault_sweep`** — scan `agent_reports/`, `ane-reverse/`, `~/models/`, sibling code repos for completed deliverables that no knowledge file references. **Surfaces unwired completed work.** Closes the recurring failure mode where five sessions in a row had a research agent stop on prior art that was sitting on disk but never indexed.
-10. **`reactive_maintenance`** (shipped Main 61) — event-driven triggers that close the correction window from hours to milliseconds. Framing-stale detection (60.9 ms from data change to flag) catches memories that are factually correct but incomplete after a configuration change; registry write propagation fans new canonical measurements out to the store immediately; immediate vault-sync fires on canonical knowledge-file edits without waiting for the hourly cycle. See Paper 2 §3 Roadblock 2 for the framing-staleness motivation.
+1. **`decay_scores`** - exponential decay on `relevance_score` (7-day half-life). Below `MIN_RELEVANCE=0.05` a memory is dormant.
+2. **`consolidate_duplicates`** - merge near-duplicate facts (cosine ≥ 0.85).
+3. **`resolve_contradictions`** - idle-time contradiction resolution via the production verifier on candidate pairs.
+4. **`vault_sync`** - supersede memories that conflict with canonical knowledge files (`vault/knowledge/*.md`).
+5. **`production_state_sync`** - keep the live production state mirrored into memory so the agent always knows what's running.
+6. **`semantic_supersession`** - three-signal supersession that catches paraphrased stale-state memories: `cosine similarity` + `tense classifier` + `restate-vs-contradict detector`. Catches what exact-string supersession misses.
+7. **`canonical_state_inject`** - parse [[CLAUDE]] tables (production critical path, services, active projects, dead paths) into first-class canonical-state memories with stable IDs (`canonical_<section>_<slug>`). Idempotent. Includes a contradiction scan with 4 signals (similarity 0.50 + entity binding + non-canonical + non-past-finding) so updating a number in [[CLAUDE]] automatically supersedes the conflicting present-tense noise.
+8. **`meta_memory_inject`** - parse session-log bullets into first-class activity memories with `source_role=meta`. Lets the agent answer "what did we ship today" / "what changed in the last build" from real history rather than hallucinating. Auto-orphans entries that age out of the 200-bullet active window.
+9. **`vault_sweep`** - scan `agent_reports/`, `ane-reverse/`, `~/models/`, sibling code repos for completed deliverables that no knowledge file references. **Surfaces unwired completed work.** Closes the recurring failure mode where five sessions in a row had a research agent stop on prior art that was sitting on disk but never indexed.
+10. **`reactive_maintenance`** (shipped Main 61) - event-driven triggers that close the correction window from hours to milliseconds. Framing-stale detection (60.9 ms from data change to flag) catches memories that are factually correct but incomplete after a configuration change; registry write propagation fans new canonical measurements out to the store immediately; immediate vault-sync fires on canonical knowledge-file edits without waiting for the hourly cycle. See Paper 2 §3 Roadblock 2 for the framing-staleness motivation.
 
 ### Framing staleness
 
@@ -73,10 +73,10 @@ A distinct degradation class beyond factual contradiction and temporal staleness
 
 Plus:
 
-- **Canonical boost** (`1.30×`) — memories with `source_role=canonical` outrank noise on the same topic.
-- **Activity-query category override** — queries like "what did we ship today" / "tell me about Build X" / "catch me up" route to `project_status` category, swap canonical boost for meta boost, widen candidate pool 4×.
-- **Filters** — drop user/assistant chat-turn echoes, drop raw vault file dumps, drop dedicated atoms with `source_role` in `{user, assistant}`.
-- **Presentation layer** — `present()` formats top-K memories for the synthesizer with category-aware headers (`RELEVANT MEASUREMENTS:`, `RELEVANT DECISIONS:`, `RELEVANT CONNECTIONS:`).
+- **Canonical boost** (`1.30×`) - memories with `source_role=canonical` outrank noise on the same topic.
+- **Activity-query category override** - queries like "what did we ship today" / "tell me about Build X" / "catch me up" route to `project_status` category, swap canonical boost for meta boost, widen candidate pool 4×.
+- **Filters** - drop user/assistant chat-turn echoes, drop raw vault file dumps, drop dedicated atoms with `source_role` in `{user, assistant}`.
+- **Presentation layer** - `present()` formats top-K memories for the synthesizer with category-aware headers (`RELEVANT MEASUREMENTS:`, `RELEVANT DECISIONS:`, `RELEVANT CONNECTIONS:`).
 
 ## Structured atoms
 
@@ -127,14 +127,14 @@ The storage backend lives in [orion-ane/memory/local_store.py](https://github.co
 | File | Role |
 |---|---|
 | `multi_path_retrieve.py` | 5-signal fusion + presentation layer |
-| `canonical_inject.py` | loop 7 — parse [[CLAUDE]] → canonical memories |
-| `meta_memory_inject.py` | loop 8 — parse session log → meta memories |
-| `semantic_supersede.py` | loop 6 — three-signal paraphrase supersession |
-| `vault_sweep.py` | loop 9 — surface unwired deliverables |
+| `canonical_inject.py` | loop 7 - parse [[CLAUDE]] → canonical memories |
+| `meta_memory_inject.py` | loop 8 - parse session log → meta memories |
+| `semantic_supersede.py` | loop 6 - three-signal paraphrase supersession |
+| `vault_sweep.py` | loop 9 - surface unwired deliverables |
 | `maintenance.py` | orchestrator for all 9 loops + launchd entry point |
-| `extractor/claim_splitter.py` | CPU FactExtractor — atomic claim splitting |
-| `extractor/rule_classifier.py` | CPU FactExtractor — type + domain regex classifier |
-| `extractor/assembler.py` | CPU FactExtractor — assemble typed claims into memory atoms |
+| `extractor/claim_splitter.py` | CPU FactExtractor - atomic claim splitting |
+| `extractor/rule_classifier.py` | CPU FactExtractor - type + domain regex classifier |
+| `extractor/assembler.py` | CPU FactExtractor - assemble typed claims into memory atoms |
 | `_embedder.py` | shared embedder factory (CoreML preferred, CPU fallback) |
 | `conceptual_extractor.py` | secondary extractor for non-atomic conceptual chunks |
 | `entity_enricher.py` | populate per-entity wikilink notes from memory atoms |
@@ -142,21 +142,21 @@ The storage backend lives in [orion-ane/memory/local_store.py](https://github.co
 
 ## Measurements
 
-- **Hit@5: 100% (20/20)** on the gold set after canonical-state injection (Main 22)
-- **Cross-session continuity: 100%** across 5 sessions (6/6 references resolved, 24/24 turns coherent)
-- **Vault sweep first run: 95% unreferenced** (428 of 451 scanned) — surfaced multiple completed deliverables that had been built but never wired into production
+- **Hit@5: 100% (20/20)** on project-state queries after canonical-state injection (Main 22). This figure is scoped to the project-state query class; general Hit@5 across the full gold set is ~67%.
+- **Cross-session continuity: 100%** across 5 sessions (6/6 references resolved, 24/24 turns coherent), bounded to the 5-session evaluation window. Longitudinal continuity beyond that window is future work.
+- **Vault sweep first run: 95% unreferenced** (428 of 451 scanned) - surfaced multiple completed deliverables that had been built but never wired into production
 - **System recall: 83%** combined (8B ANE extractor + CPU FactExtractor) on the gold set, vs 76% solo and 65% CPU-only
 
 ## Papers
 
-- **Paper 1:** "Every Cycle Counts: A Self-Correcting Cognitive Architecture on Heterogeneous Consumer Silicon" — hardware substrate and cognitive pipeline. [arXiv link TBD]
-- **Paper 2:** "Five Roadblocks to Persistent Memory for Personal AI" — memory architecture taxonomy and measured outcomes. **Primary architectural description for this repo.** [arXiv link TBD]
+- **Paper 1:** "Every Cycle Counts: A Self-Correcting Cognitive Architecture on Heterogeneous Consumer Silicon" - hardware substrate and cognitive pipeline. [arXiv link TBD]
+- **Paper 2:** "Five Roadblocks to Persistent Memory for Personal AI" - memory architecture taxonomy and measured outcomes. **Primary architectural description for this repo.** [arXiv link TBD]
 
 ## Related
 
-- [orion-ane](https://github.com/MidasMulli/cognitive-stack-ane) — the Midas agent and `LocalMemoryStore` backend
-- [ane-compiler](https://github.com/MidasMulli/ane-compiler) — the 8B Q8 extractor that feeds the Subconscious
-- [ngram-engine](https://github.com/MidasMulli/ngram-engine) — the verifier server with prefix-cache integration
+- [orion-ane](https://github.com/MidasMulli/cognitive-stack-ane) - the Midas agent and `LocalMemoryStore` backend
+- [ane-compiler](https://github.com/MidasMulli/ane-compiler) - the 8B Q8 extractor that feeds the Subconscious
+- [ngram-engine](https://github.com/MidasMulli/ngram-engine) - the verifier server with prefix-cache integration
 
 ## License
 
