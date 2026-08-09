@@ -473,6 +473,289 @@ def production_state_sync(col=None):
     return superseded
 
 
+# ── Auto-populating measurement registry (Main 38 P3) ──────────────────
+#
+# Promotes quantitative facts from user / canonical / research / meta
+# sources into data/measurement_registry.json. Newer user-stated values
+# for the same (entity, measurement_type) key replace older entries.
+# Assistant-sourced facts are excluded via the provenance filter.
+#
+# The directive: "after a session where the user states a new
+# measurement ('the 8B now runs at 8.2 tok/s'), the registry should
+# contain the updated value on the next session open without anyone
+# editing a JSON file."
+#
+# Design:
+#   - loop reads the current registry JSON (merges with existing entries)
+#   - scans the store for facts with both entities_json and
+#     quantities_json populated, source_role in the accepted set
+#   - derives measurement_type from the unit (tok/s -> throughput,
+#     GB/s -> bandwidth, ms -> latency, etc.)
+#   - builds (entity_key, measurement_type) key, matches or creates
+#     registry entry
+#   - newer timestamp wins for the same key
+#   - writes the merged registry atomically
+
+REGISTRY_PATH = os.path.expanduser(
+    "~/Desktop/cowork/data/measurement_registry.json")
+
+# Source roles allowed to write to the registry. Assistant is excluded
+# to prevent the Main 37/38 self-poisoning pattern from leaking into
+# canonical measurements via this new path.
+REGISTRY_ALLOWED_ROLES = {"user", "canonical", "research", "meta", "claude_vault_realtime"}
+
+# Unit to measurement_type mapping. Derived from the shape of the unit
+# string on the fact's quantities_json entry.
+REGISTRY_UNIT_TO_TYPE = {
+    "tok/s": "throughput",
+    "tokens/s": "throughput",
+    "tok-s": "throughput",
+    "tps": "throughput",
+    "GB/s": "bandwidth",
+    "gb/s": "bandwidth",
+    "MB/s": "bandwidth",
+    "mb/s": "bandwidth",
+    "ms": "latency",
+    "us": "latency",
+    "µs": "latency",
+    "microseconds": "latency",
+    "ns": "latency",
+    "seconds": "latency",
+    "s": "latency",
+    "MB": "capacity",
+    "GB": "capacity",
+    "KB": "capacity",
+    "TB": "capacity",
+    "%": "rate",
+    "x": "speedup",
+    "X": "speedup",
+    "TFLOPS": "compute",
+    "GFLOPS": "compute",
+    "FLOPS": "compute",
+    "opcodes": "count",
+    "dispatches": "count",
+    "loops": "count",
+    "records": "count",
+    "ways": "geometry",
+    "B": "geometry",
+    "lines": "geometry",
+}
+
+# Entity normalization: user-stated entities get mapped to canonical
+# registry keys via this alias table. Mirrors the one in
+# tools/build_measurement_registry.py but is kept local so the
+# maintenance loop is self-contained.
+REGISTRY_ENTITY_CANONICAL = {
+    "8B": "llama-8b",
+    "8b": "llama-8b",
+    "llama 8b": "llama-8b",
+    "llama-8b": "llama-8b",
+    "llama-3.1-8b": "llama-8b",
+    "llama 3.1 8b": "llama-8b",
+    "1B": "llama-1b",
+    "1b": "llama-1b",
+    "llama 1b": "llama-1b",
+    "llama-1b": "llama-1b",
+    "72B": "72b",
+    "72b": "72b",
+    "qwen": "72b",
+    "qwen72b": "72b",
+    "qwen2.5-72b": "72b",
+    "neuron": "neuron",
+    "ane": "ane",
+    "apple neural engine": "ane",
+    "slc": "slc",
+    "system level cache": "slc",
+    "gpu": "gpu",
+    "metal": "gpu",
+    "dram": "dram",
+    "amcc": "amcc",
+    "minilm": "miniml",
+    "miniml": "miniml",
+    "gpt-2": "gpt2",
+    "gpt2": "gpt2",
+    "nax": "nax",
+}
+
+
+def _normalize_entity(entity: str):
+    if not entity:
+        return None
+    return REGISTRY_ENTITY_CANONICAL.get(entity.lower().strip())
+
+
+def _derive_measurement_type(unit: str):
+    if not unit:
+        return None
+    unit = unit.strip()
+    if unit in REGISTRY_UNIT_TO_TYPE:
+        return REGISTRY_UNIT_TO_TYPE[unit]
+    # Try lowercase fallback
+    return REGISTRY_UNIT_TO_TYPE.get(unit.lower())
+
+
+_QUANTITY_SPLIT_RE = re.compile(
+    r"^\s*([+-]?\d+(?:[.,]\d+)?|~\d+(?:[.,]\d+)?)\s*([A-Za-z/%µ]+.*)$")
+
+
+def _parse_quantity(q: str):
+    """Split a quantity string like '8.2 tok/s' or '288 GB/s' into
+    (value, unit). Returns (None, None) on parse failure."""
+    if not q:
+        return None, None
+    m = _QUANTITY_SPLIT_RE.match(str(q).strip())
+    if not m:
+        return None, None
+    value = m.group(1).strip()
+    unit = m.group(2).strip()
+    return value, unit
+
+
+def _load_current_registry():
+    if not os.path.exists(REGISTRY_PATH):
+        return {}
+    try:
+        with open(REGISTRY_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_registry(registry):
+    os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
+    tmp = REGISTRY_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(registry, f, indent=2, sort_keys=True)
+    os.replace(tmp, REGISTRY_PATH)
+
+
+def auto_populate_measurement_registry(col=None):
+    """Promote quantitative user-stated facts into the measurement registry.
+
+    Main 38 P3. Runs as part of maintenance run_all() and also on
+    midas_ui boot so that 'next session open' sees updated values.
+
+    Returns stats dict {added, updated, unchanged, skipped}.
+    """
+    if col is None:
+        col = get_collection()
+
+    registry = _load_current_registry()
+    all_data = col.get(include=["metadatas", "documents"])
+
+    added = 0
+    updated = 0
+    unchanged = 0
+    skipped = 0
+
+    def _coerce_list(value):
+        """LocalMemoryStore col.get() returns entities/quantities as
+        pre-parsed lists (via the shim) but some older rows may still
+        carry raw JSON strings. Handle both."""
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            try:
+                v = json.loads(value)
+                return v if isinstance(v, list) else None
+            except Exception:
+                return None
+        return None
+
+    for fid, meta, doc in zip(
+            all_data["ids"], all_data["metadatas"], all_data["documents"]):
+        # Provenance gate: assistant-sourced facts cannot write to registry.
+        source_role = (meta.get("source_role") or "").strip()
+        if source_role not in REGISTRY_ALLOWED_ROLES:
+            skipped += 1
+            continue
+        # Active only.
+        if meta.get("superseded_by"):
+            skipped += 1
+            continue
+        # Require both entities and quantities. Check both the shim keys
+        # (entities / quantities) and the raw SQLite column names
+        # (entities_json / quantities_json / atom_entities_json) for
+        # forward/backward compatibility.
+        entities = _coerce_list(
+            meta.get("entities")
+            or meta.get("entities_json")
+            or meta.get("atom_entities_json"))
+        quantities = _coerce_list(
+            meta.get("quantities") or meta.get("quantities_json"))
+        if not entities or not quantities:
+            skipped += 1
+            continue
+
+        # Parse each quantity, derive type, match entity canonical key.
+        ts = meta.get("timestamp") or ""
+        for entity in entities:
+            key_entity = _normalize_entity(entity)
+            if not key_entity:
+                continue
+            for q in quantities:
+                value, unit = _parse_quantity(q)
+                if value is None or not unit:
+                    continue
+                mtype = _derive_measurement_type(unit)
+                if not mtype:
+                    continue
+                reg_key = f"{key_entity}.{mtype}"
+
+                current = registry.get(reg_key)
+                if current:
+                    # Conflict resolution: newer timestamp wins.
+                    cur_ts = current.get("source_timestamp") or ""
+                    if ts and cur_ts and ts <= cur_ts:
+                        unchanged += 1
+                        continue
+                    # Also skip if value unchanged.
+                    if current.get("value") == value and current.get("unit") == unit:
+                        unchanged += 1
+                        continue
+
+                new_entry = {
+                    "entity": key_entity,
+                    "measurement_type": mtype,
+                    "value": value,
+                    "unit": unit,
+                    "source": f"auto-populated from {source_role}",
+                    "source_timestamp": ts,
+                    "source_fact_id": fid,
+                    "status": "auto",
+                    "aliases": list({entity, key_entity}),
+                }
+                # Preserve existing aliases from any prior entry.
+                if current and "aliases" in current:
+                    merged = set(current.get("aliases") or []) | set(new_entry["aliases"])
+                    new_entry["aliases"] = sorted(merged)
+
+                if current:
+                    updated += 1
+                else:
+                    added += 1
+                registry[reg_key] = new_entry
+
+    # Main 43: refresh dynamic_at_boot entries with live values.
+    # memories.count was going stale every session (7,395 vs 9,080 actual).
+    try:
+        live_count = col.count()
+        if "memories.count" in registry:
+            registry["memories.count"]["value"] = str(live_count)
+    except Exception:
+        pass
+
+    _write_registry(registry)
+    log.info(f"Auto-populate registry: {added} added, {updated} updated, "
+             f"{unchanged} unchanged, {skipped} skipped (now "
+             f"{len(registry)} entries)")
+    return {"added": added, "updated": updated,
+            "unchanged": unchanged, "skipped": skipped,
+            "total": len(registry)}
+
+
 def run_all():
     """Run all maintenance functions."""
     col = get_collection()
@@ -547,6 +830,18 @@ def run_all():
     except Exception as e:
         log.warning(f"vault_sweep failed: {e}")
 
+    # Main 38 P3: auto-populating measurement registry.
+    registry_added = 0
+    registry_updated = 0
+    registry_total = 0
+    try:
+        reg_stats = auto_populate_measurement_registry(col=col)
+        registry_added = reg_stats.get("added", 0)
+        registry_updated = reg_stats.get("updated", 0)
+        registry_total = reg_stats.get("total", 0)
+    except Exception as e:
+        log.warning(f"auto_populate_measurement_registry failed: {e}")
+
     elapsed = time.time() - t0
 
     log.info(f"Done in {elapsed:.1f}s: "
@@ -558,7 +853,8 @@ def run_all():
              f"canonical_noise_superseded={canonical_noise_superseded} "
              f"meta_inject={meta_inserted}+{meta_updated}/{meta_unchanged} "
              f"meta_orphans={meta_orphans} "
-             f"vault_sweep={sweep_unref}/{sweep_scanned}")
+             f"vault_sweep={sweep_unref}/{sweep_scanned} "
+             f"registry={registry_added}+{registry_updated}/{registry_total}")
 
     return {
         "total_memories": total,
@@ -572,6 +868,9 @@ def run_all():
         "canonical_inserted": canonical_inserted,
         "canonical_updated": canonical_updated,
         "canonical_unchanged": canonical_unchanged,
+        "registry_added": registry_added,
+        "registry_updated": registry_updated,
+        "registry_total": registry_total,
         "elapsed_s": round(elapsed, 1),
     }
 

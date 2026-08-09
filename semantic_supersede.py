@@ -42,6 +42,63 @@ if not log.handlers:
 CLAUDE_MD = Path(os.path.expanduser("~/Desktop/cowork/CLAUDE.md"))
 EMBEDDING_CACHE = Path(__file__).parent / ".canonical_embeddings.npz"
 WIKILINK_INDEX = Path(os.path.expanduser("~/Desktop/cowork/vault/.wikilink_index.json"))
+CONTRADICTIONS_DIR = Path(os.path.expanduser(
+    "~/Desktop/cowork/vault/memory/contradictions"))
+
+
+def emit_contradiction_record(fid: str, doc: str, meta: dict, info: dict) -> Path:
+    """Main 34 S1C: write a markdown record for a flagged contradiction.
+
+    Embedding-only: cheap to call inline. One file per (memory, canonical)
+    pair, named by timestamp + short hash. The /api/subconscious/health
+    endpoint counts unresolved records by scanning for `resolved: false`
+    in the frontmatter.
+    """
+    import hashlib
+    CONTRADICTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    ts = time.strftime("%Y-%m-%dT%H-%M-%S")
+    h = hashlib.sha1(f"{fid}|{info.get('best_entry','')}".encode()).hexdigest()[:10]
+    path = CONTRADICTIONS_DIR / f"{ts}_{h}.md"
+    if path.exists():
+        return path
+    sim = float(info.get("best_sim", 0.0))
+    stale_term = info.get("matched_stale_term", "")
+    body = (
+        f"---\n"
+        f"detected_at: {time.strftime('%Y-%m-%dT%H:%M:%S')}\n"
+        f"memory_a_id: {fid}\n"
+        f"memory_b_id: canonical:{info.get('best_entry','')[:60]}\n"
+        f"similarity: {sim:.3f}\n"
+        f"contradiction_type: status_superseded\n"
+        f"resolved: false\n"
+        f"---\n"
+        f"## Memory A (stale)\n"
+        f"{doc[:600]}\n\n"
+        f"(source: {meta.get('source','unknown')}, "
+        f"role: {meta.get('source_role','unknown')})\n\n"
+        f"## Memory B (canonical state)\n"
+        f"{info.get('best_entry','')[:600]}\n\n"
+        f"## Heuristic reason\n"
+        f"semantic_supersede: cosine={sim:.3f}, "
+        f"tense={info.get('tense', 0):.2f}, "
+        f"matched_stale_term={stale_term[:120]}\n"
+    )
+    path.write_text(body)
+    return path
+
+
+def count_unresolved_contradictions() -> int:
+    if not CONTRADICTIONS_DIR.exists():
+        return 0
+    n = 0
+    for p in CONTRADICTIONS_DIR.glob("*.md"):
+        try:
+            head = p.read_text()[:400]
+            if "resolved: false" in head:
+                n += 1
+        except Exception:
+            pass
+    return n
 
 # Wiki-link regex — MUST stay in sync with research_tools.py
 WIKILINK_RX = re.compile(r'(?<!\!)\[\[([^\]|#]+?)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]')
@@ -602,6 +659,14 @@ def semantic_supersession(col=None, dry_run: bool = False) -> dict:
         if emb is None or len(emb) == 0:
             n_skipped_zero_emb += 1
             continue
+        # Main 33b structural fix: claude_automemory entries are curated
+        # finding files that are written explicitly as CORRECTIONS to old
+        # vault state. Auto-supersession previously buried 21 of them by
+        # marking each as "superseded by" the very dead-paths they refute,
+        # making them invisible to recall. NEVER auto-supersede them.
+        if meta.get("source_role") == "claude_automemory":
+            n_decided_keep += 1
+            continue
 
         # Extract source field from metadata for link-neighborhood scoring.
         # Auto-memory and any future link-bearing memories will have this set;
@@ -618,12 +683,16 @@ def semantic_supersession(col=None, dry_run: bool = False) -> dict:
 
         if decide:
             n_decided_supersede += 1
-            decisions_to_apply.append((fid, meta, info))
+            decisions_to_apply.append((fid, doc, meta, info))
+            try:
+                emit_contradiction_record(fid, doc, meta, info)
+            except Exception as e:
+                log.warning(f"contradiction record emit failed for {fid}: {e}")
         else:
             n_decided_keep += 1
 
     if not dry_run:
-        for fid, meta, info in decisions_to_apply:
+        for fid, _doc, meta, info in decisions_to_apply:
             meta_copy = dict(meta)
             meta_copy["superseded_by"] = f"semantic_supersede_{info['best_entry'][:40]}"
             meta_copy["supersede_reason"] = (

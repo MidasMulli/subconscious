@@ -10,3 +10,11 @@ extractions_v2/
 extractions_v3/
 extractions_v4/
 retrieval_logs/
+
+# graphify-out/ -- code-graph build cache (~94 MB). Also indexes sources, so it
+# can carry gated content past a source-level gate. Never commit.
+graphify-out/
+
+# editor/rollback backups, not source
+*.bak
+*.pre_*_2026-*.bak

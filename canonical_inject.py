@@ -256,6 +256,85 @@ def make_canonical_id(section: str, key: str) -> str:
     return f"canonical_{section}_{key}"[:120]
 
 
+# M97 Fix 2 (canonical injection domain gating). Per directive §1.3:
+# canonicals only inject when the query topic matches the canonical's
+# domain; orthogonal architectural canonicals stay always-on as "universal".
+# The topic taxonomy mirrors orion-ane/agent/context_tracker.py DEFAULT_TOPIC_KEYWORDS
+# so the inject-time classifier and retrieval-time ContextTracker see the
+# same topic space.
+_DOMAIN_KEYWORDS = {
+    "hardware_characterization": [
+        "slc", "amcc", "macc", "dcs", "ane", "nax", "gpu", "amx",
+        "bandwidth", "register", "kext", "ioreport", "tflops",
+        "fabric", "silicon", "m5 pro", "m4", "dispatch", "mmio",
+        "aned", "coreml", "hwx", "neuron",
+    ],
+    "midas_infrastructure": [
+        "midas", "midas_ui", "router", "delegation", "server",
+        "endpoint", "/api/", "spec decode", "n-gram", "drafter",
+        "verifier", "prompt cache", "production stack", "/8891", "/8899",
+        "/8450",
+    ],
+    "subconscious_memory": [
+        "subconscious", "memory", "extraction", "fact extract", "recall",
+        "retrieval", "memorystore", "maintenance loop", "enricher",
+        "supersession", "canonical state", "vault sync", "chromadb",
+        "minilm", "embedder",
+    ],
+    "ml_models_training": [
+        "llama", "qwen", "gpt", "8b", "72b", "3b", "1b", "27b", "31b",
+        "gemma", "tok/s", "fine-tune", "lora", "distill", "inference",
+        "training", "hugging face",
+    ],
+    "ane_compiler": [
+        "ane-compiler", "ane-dispatch", "fusion", "conv2d", "gelu", "ffn",
+        "espresso", "mlpackage", "opcode", "0x9341", "0x9141", "0x9241",
+        "dispatch table", "macroop",
+    ],
+    "paper_writing": [
+        "paper", "draft", "abstract", "every cycle", "arxiv",
+        "reviewer", "methodology", "citation", "thesis", "locomo", "gold set",
+    ],
+}
+
+# Canonicals tagged "universal" always boost regardless of query topic —
+# system-identity + architectural-standing-rule records. Pattern-matched
+# on canonical id/text rather than keyword.
+_UNIVERSAL_PATTERNS = [
+    "standing_rule", "session_style", "canonical_service", "system_identity",
+]
+
+
+def _infer_canonical_domain(canonical_id: str, text: str, entities: list[str]) -> str:
+    """Classify a canonical record into a topic domain by keyword match.
+
+    Returns one of the topic keys from _DOMAIN_KEYWORDS, or "universal" for
+    architectural records that apply regardless of query, or "" if no
+    domain matches (treated as universal by the retrieval-side gate).
+
+    Scoring: sum of (text+entity_hits) per topic, tiebreak by first match.
+    """
+    # Universal short-circuit (architectural standing rules, system identity).
+    id_lower = (canonical_id or "").lower()
+    if any(p in id_lower for p in _UNIVERSAL_PATTERNS):
+        return "universal"
+
+    haystack = (text + " " + " ".join(entities)).lower()
+    scores = {}
+    for topic, keywords in _DOMAIN_KEYWORDS.items():
+        hits = sum(1 for kw in keywords if kw in haystack)
+        if hits:
+            scores[topic] = hits
+    if not scores:
+        return "universal"  # no specific domain → treat as always-on
+    # Top domain wins. If top and runner-up are tied, treat as universal
+    # (multi-domain canonicals shouldn't be gated by a single topic).
+    ordered = sorted(scores.items(), key=lambda x: -x[1])
+    if len(ordered) >= 2 and ordered[0][1] == ordered[1][1]:
+        return "universal"
+    return ordered[0][0]
+
+
 def upsert_canonical(col, fid: str, text: str, entities: list[str], embedder) -> tuple[str, list[float]]:
     """Upsert one canonical memory. Returns ('inserted'|'updated'|'unchanged', emb)."""
     existing = col.get(ids=[fid], include=["documents", "embeddings"])
@@ -267,6 +346,7 @@ def upsert_canonical(col, fid: str, text: str, entities: list[str], embedder) ->
         return "unchanged", existing_emb
 
     emb = embedder.encode([text], normalize_embeddings=True)[0].tolist()
+    domain = _infer_canonical_domain(fid, text, entities)
     meta = {
         "type": "state",
         "source_role": "canonical",
@@ -275,6 +355,7 @@ def upsert_canonical(col, fid: str, text: str, entities: list[str], embedder) ->
         "relevance_score": "0.95",
         "entities": json.dumps(entities),
         "quantities": "[]",
+        "topic": domain,  # M97 Fix 2 — domain gate at retrieval
     }
 
     if existing["ids"]:
