@@ -53,11 +53,11 @@ The user never sees the Subconscious. They notice the agent remembers what was s
 7. **`canonical_state_inject`** - parse [[CLAUDE]] tables (production critical path, services, active projects, dead paths) into first-class canonical-state memories with stable IDs (`canonical_<section>_<slug>`). Idempotent. Includes a contradiction scan with 4 signals (similarity 0.50 + entity binding + non-canonical + non-past-finding) so updating a number in [[CLAUDE]] automatically supersedes the conflicting present-tense noise.
 8. **`meta_memory_inject`** - parse session-log bullets into first-class activity memories with `source_role=meta`. Lets the agent answer "what did we ship today" / "what changed in the last build" from real history rather than hallucinating. Auto-orphans entries that age out of the 200-bullet active window.
 9. **`vault_sweep`** - scan `agent_reports/`, `ane-reverse/`, `~/models/`, sibling code repos for completed deliverables that no knowledge file references. **Surfaces unwired completed work.** Closes the recurring failure mode where five sessions in a row had a research agent stop on prior art that was sitting on disk but never indexed.
-10. **`reactive_maintenance`** (shipped Main 61) - event-driven triggers that close the correction window from hours to milliseconds. Framing-stale detection (60.9 ms from data change to flag) catches memories that are factually correct but incomplete after a configuration change; registry write propagation fans new canonical measurements out to the store immediately; immediate vault-sync fires on canonical knowledge-file edits without waiting for the hourly cycle. See Paper 2 §3 Roadblock 2 for the framing-staleness motivation.
+10. **`reactive_maintenance`** (shipped Main 61) - event-driven triggers that close the correction window from hours to milliseconds. Framing-stale detection (60.9 ms from data change to flag) catches memories that are factually correct but incomplete after a configuration change; registry write propagation fans new canonical measurements out to the store immediately; immediate vault-sync fires on canonical knowledge-file edits without waiting for the hourly cycle. The framing-staleness class is described in the next section.
 
 ### Framing staleness
 
-A distinct degradation class beyond factual contradiction and temporal staleness: a memory is factually correct but incomplete in a way that misleads generation. The production example: "cross-accelerator contention is −4.7%" was measured correctly under Llama 70B, but after the Gemma 4 31B swap the correct symmetric GPU-side figure is −20.1%. Neither statement is wrong in isolation; a query about "the contention result" that retrieves only the old framing causes the generator to cite a stale number. Factual-contradiction detectors miss this because nothing contradicts. Relevance decay misses it because the old memory is still being accessed. The reactive trigger above was built specifically to catch this class. Full treatment in Paper 2 §3 Roadblock 2.
+A distinct degradation class beyond factual contradiction and temporal staleness: a memory is factually correct but incomplete in a way that misleads generation. The production example: "cross-accelerator contention is −4.7%" was measured correctly under Llama 70B, but after the Gemma 4 31B swap the correct symmetric GPU-side figure is −20.1%. Neither statement is wrong in isolation; a query about "the contention result" that retrieves only the old framing causes the generator to cite a stale number. Factual-contradiction detectors miss this because nothing contradicts. Relevance decay misses it because the old memory is still being accessed. The reactive trigger above was built specifically to catch this class. This section is the full public treatment of that class.
 
 ## Multi-path 5-signal retrieval
 
@@ -149,8 +149,6 @@ The storage backend lives in [orion-ane/memory/local_store.py](https://github.co
 
 ## Papers
 
-- **Paper 1:** "Every Cycle Counts: A Self-Correcting Cognitive Architecture on Heterogeneous Consumer Silicon" - hardware substrate and cognitive pipeline. [arXiv link TBD]
-- **Paper 2:** "Five Roadblocks to Persistent Memory for Personal AI" - memory architecture taxonomy and measured outcomes. **Primary architectural description for this repo.** [arXiv link TBD]
 
 ## Related
 
